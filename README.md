@@ -1,6 +1,6 @@
 # Durandal
 
-UCI chess engine playing traditional chess, Fischer random chess, Capablanca chess, Capablanca random chess.
+UCI chess engine playing traditional chess, Fischer random chess, Capablanca chess and Capablanca random chess.
 
 Compiled with Delphi 10.3.
 
