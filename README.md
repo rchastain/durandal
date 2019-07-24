@@ -6,4 +6,4 @@ Written in Pascal by Roland Chastain.
 
 Compiled with Delphi 10.3.
 
-Command line: DCC32 -CC -NSsystem durandal.pas
+Command line: `DCC32 -CC -NSsystem durandal.pas`
