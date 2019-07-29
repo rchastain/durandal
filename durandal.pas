@@ -25,16 +25,20 @@ var
 
 procedure TProcessus.Execute;
 var
-  t: cardinal;
-  m: string;
+  LTimeElapsed: cardinal;
+  LMove: string;
 begin
-  t := GetTickCount;
-  m := BestMove(LPos, LTimeAvail);
-  t := GetTickCount - t;
+  LTimeElapsed := GetTickCount;
+{$IFDEF RANDOM_MOVER}
+  LMove := RandomMove(LPos);
+{$ELSE}
+  LMove := BestMove(LPos, LTimeAvail);
+{$ENDIF}
+  LTimeElapsed := GetTickCount - LTimeElapsed;
   if not Terminated then
   begin
-    ToLog(FormatDateTime('"Temps écoulé : "hh:nn:ss:zzz', t / (1000 * SECSPERDAY)), 1);
-    SendToUser(Format('bestmove %s', [m]));
+    ToLog(FormatDateTime('"Temps écoulé : "hh:nn:ss:zzz', LTimeElapsed / (1000 * SECSPERDAY)), 1);
+    SendToUser(Format('bestmove %s', [LMove]));
   end;
 end;
 
@@ -51,13 +55,14 @@ var
   LCapablanca: boolean;
   
 begin
+{$IFDEF RANDOM_MOVER}
+  Randomize;
+{$ENDIF}
   LCapablanca := FALSE;
-  
   while not EOF do
   begin
     ReadLn(LUserCmd);
     ToLog(Concat('>> ', LUserCmd));
-    
     if LUserCmd = 'quit' then
       Break
     else
@@ -65,11 +70,9 @@ begin
     begin
       SendToUser(Format('id name %s %s', [CApp, CVer]), FALSE);
       SendToUser(Format('id author %s', [CAut]), FALSE);
-	  (*
-      SendToUser('option name UCI_Chess960 type check default false', FALSE);
+     {SendToUser('option name UCI_Chess960 type check default false', FALSE);
       SendToUser('option name UCI_Capablanca type check default false', FALSE);
-      SendToUser('option name UCI_Caparandom type check default false', FALSE);
-	  *)
+      SendToUser('option name UCI_Caparandom type check default false', FALSE);}
       SendToUser('option name UCI_Variant type combo default chess var capablanca var caparandom var chess var fischerandom', FALSE);
       SendToUser('uciok');
     end else
@@ -129,6 +132,5 @@ begin
       SendToUser(ShowPosition(LPos))
 	  else
 	    ToLog(Format('Commande non reconnue : %s', [LUserCmd]));
-    Sleep(10);
   end;
 end.

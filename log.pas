@@ -14,17 +14,22 @@ var
   LFile: array[0..1] of text;
 
 procedure CreateFiles;
+const
+  CDir = 'log';
 var
   LDateTime: string;
   LName: array[0..1] of string;
   LFileNum: integer;
 begin
+  if not DirectoryExists(CDir) then
+    if not CreateDir(CDir) then
+      raise Exception.Create('Impossible de créer le dossier.');
   LDateTime := FormatDateTime('yyyymmddhhnnss', Now);
   for LFileNum := 0 to 1 do
-    LName[LFileNum] := Format('%s-%d.log', [LDateTime, LFileNum]);
+    LName[LFileNum] := Format('%s-%s-%d.log', [ChangeFileExt(ExtractFileName(ParamStr(0)), ''), LDateTime, LFileNum]);
   for LFileNum := 0 to 1 do
   begin
-    Assign(LFile[LFileNum], LName[LFileNum]);
+    Assign(LFile[LFileNum], CDir + '\' + LName[LFileNum]);
     if FileExists(LName[LFileNum]) then
       Append(LFile[LFileNum])
     else
@@ -43,7 +48,7 @@ end;
 procedure ToLog(const ALine: string; const AFileNum: integer);
 begin
 {$IFDEF DEBUG}
-  WriteLn(LFile[AFileNum], Concat(DateTimeToStr(Now()), ' ', ALine));
+  WriteLn(LFile[AFileNum], ALine);
   Flush(LFile[AFileNum]);
 {$ENDIF}
 end;
