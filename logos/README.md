@@ -1,5 +1,5 @@
 
-Logos for Durandal by Norbert Raimund Leisner.
+Logos for *Durandal* by Norbert Raimund Leisner.
 
 ![alt text](Durandal-1.bmp)
 
