@@ -2,12 +2,18 @@
 {$APPTYPE CONSOLE}
 
 uses
-  SysUtils, Classes, Math, Chess, Parser, Log;
+  SysUtils, Classes, Math, StrUtils, Chess, Log, History,
+{$IFDEF FPC}
+  Parser_FreePascal;
+{$ELSE}
+  Parser;
+{$ENDIF}
 
 {$I version.inc}
 
 procedure SendToUser(const AText: string; const AFlush: boolean = TRUE);
 begin
+  ToLog(Concat(TimeToStr(Now), ' << ', AText));
   WriteLn(output, AText);
   if AFlush then
     Flush(output);
@@ -21,24 +27,20 @@ type
 
 var
   LPos: TPosition;
-  LTimeAvail: cardinal;
+  LMoveTime: cardinal;
 
 procedure TProcessus.Execute;
 var
   LTimeElapsed: cardinal;
   LMove: string;
 begin
-  LTimeElapsed := GetTickCount;
-{$IFDEF RANDOM_MOVER}
-  LMove := RandomMove(LPos);
-{$ELSE}
-  LMove := BestMove(LPos, LTimeAvail);
-{$ENDIF}
-  LTimeElapsed := GetTickCount - LTimeElapsed;
+  LTimeElapsed := {$IFDEF FPC}GetTickCount64{$ELSE}GetTickCount{$ENDIF};
+  LMove := {$IFDEF RANDOM_MOVER}RandomMove(LPos){$ELSE}BestMove(LPos, LMoveTime){$ENDIF};
+  LTimeElapsed := {$IFDEF FPC}GetTickCount64{$ELSE}GetTickCount{$ENDIF} - LTimeElapsed;
   if not Terminated then
   begin
-    ToLog(FormatDateTime('"Temps écoulé : "hh:nn:ss:zzz', LTimeElapsed / (1000 * SECSPERDAY)), 1);
     SendToUser(Format('bestmove %s', [LMove]));
+    ToLog(FormatDateTime('"Temps écoulé : "hh:nn:ss:zzz', LTimeElapsed / (1000 * SECSPERDAY)), 1);
   end;
 end;
 
@@ -62,7 +64,7 @@ begin
   while not EOF do
   begin
     ReadLn(LUserCmd);
-    ToLog(Concat('>> ', LUserCmd));
+    ToLog(Concat(TimeToStr(Now), ' >> ', LUserCmd));
     if LUserCmd = 'quit' then
       Break
     else
@@ -90,11 +92,9 @@ begin
     begin
       if IsCmdPosStartPos(LUserCmd, LMoves) then
       begin
-        if LCapablanca then
-          LFen := CCapablancaStartPos
-        else
-          LFen := CStartPos;
+        LFen := IfThen(LCapablanca, CCapablancaStartPos, CStartPos);
         InitPosition(LPos, LFen);
+        LHistory.Clear;
       end else
       if IsCmdPosFen(LUserCmd, LFen, LMoves)then
       begin
@@ -102,29 +102,31 @@ begin
       end else
         Assert(FALSE);
       for LIdx := Low(LMoves) to High(LMoves) do
+      begin
         DoMove(LPos, LMoves[LIdx]);
+        LHistory.Append(LMoves[LIdx]);
+      end;
     end else
     if Copy(LUserCmd, 1, 2) = 'go' then
     begin
       if IsCmdGo(LUserCmd, LWTime, LBTime, LWInc, LBinc) then // go wtime 60000 btime 60000 winc 1000 binc 1000
-        LTimeAvail := IfThen(LPos.color, LBinc, LWInc)
+        LMoveTime := IfThen(LPos.color, LBinc, LWInc)
       else
       if IsCmdGo(LUserCmd, LWTime, LBTime, LMTG) then         // go wtime 59559 btime 56064 movestogo 38
-        LTimeAvail := IfThen(LPos.color, LBTime div LMTG, LWTime div LMTG)
+        LMoveTime := IfThen(LPos.color, LBTime div LMTG, LWTime div LMTG)
       else
       if IsCmdGo(LUserCmd, LWTime, LBTime) then               // go wtime 600000 btime 600000
-        LTimeAvail := IfThen(LPos.color, LBTime, LWTime)
+        LMoveTime := IfThen(LPos.color, LBTime, LWTime)
       else
       if IsCmdGo(LUserCmd, LMTime) then                       // go movetime 500
-        LTimeAvail := LMTime
+        LMoveTime := LMTime
       else
-        Assert(FALSE);
+        LMoveTime := 1000;
       LProcessus := TProcessus.Create(TRUE);
       with LProcessus do
       begin
         FreeOnTerminate := TRUE;
-        //Priority := tpHigher;
-        Priority := tpNormal;
+        Priority := tpHigher;
         Start;
       end;
     end else

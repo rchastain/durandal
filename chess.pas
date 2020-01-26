@@ -29,6 +29,7 @@ type
   TMove = integer;
   TMoveGenOpt = (goCastling, goPawnCapturingEmptySquare);
   TMoveGenOptSet = set of TMoveGenOpt;
+  TStrArray = array of string;
 
 function ShowPosition(const APos: TPosition): string;
 function SquareToStr(const x, y: integer): string; overload;
@@ -50,11 +51,12 @@ function Eval(const APos: TPosition): integer;
 function IsCheck(const APos: TPosition): boolean;
 function BestMove(const APos: TPosition; const ATime: cardinal): string;
 function RandomMove(const APos: TPosition): string;
+procedure GenLegalMoves(var AMoves: TStrArray; const APos: TPosition);
 
 implementation
 
 uses
-  SysUtils, Classes, Math, Vectors, Log;
+  SysUtils, Classes, Math, StrUtils, Vectors, Log, History;
 
 function FindChar(const s1, s2: string): char;
 var
@@ -68,7 +70,6 @@ end;
 
 function ShowPosition(const APos: TPosition): string;
 const
-  CColorName: array[boolean] of string = ('White', 'Black');
   CWhiteRookFile = '-ABCDEFGHIJ';
   CBlackRookFile = '-abcdefghij';
 var
@@ -84,13 +85,12 @@ begin
       c := APos.board[15 * x + y + 35];
       result := Concat(result, ' ', c);
     end;
-    result := Concat(result, #13#10);
+    result := Concat(result, IfThen(((y = 7) and APos.color) or ((y = 0) and not APos.color), ' <--', ''), #13#10);
   end;
   result := Format(
-    '%sActive color: %s'#13#10'Castling right: %s%s%s%s'#13#10'En passant: %s',
+    '%s%s%s%s%s %s',
     [
       result,
-      CColorName[APos.color],
       CWhiteRookFile[APos.castling[0] + 2],
       CWhiteRookFile[APos.castling[1] + 2],
       CBlackRookFile[APos.castling[2] + 2],
@@ -104,10 +104,10 @@ const
   COutside = '#';
   CEmptySquare = '.';
   CNil = -1;
-  ASKTS = 2;                                 { Alpha side king target square. }
-  OSKTS: array[boolean] of integer = (6, 8); { Omega side king target square. }
-  ASRTS = 3;                                 { Alpha side rook target square. }
-  OSRTS: array[boolean] of integer = (5, 7); { Omega side rook target square. }
+  CASideKingTS = 2;
+  CASideRookTS = 3;
+  CJSideKingTS: array[boolean] of integer = (6, 8);
+  CJSideRookTS: array[boolean] of integer = (5, 7);
 
 function SquareToStr(const x, y: integer): string; overload;
 begin
@@ -245,7 +245,7 @@ begin
     xk := 0;
 	  while (xk <= 9) and (ABoard[15 * xk + 0 + 35] <> 'K') do Inc(xk);
 	  Assert(xk <= 9);
-    if Pos('K', AFen) > 0 then c := 'K' else c := FindChar(AFen, Copy('ABCDEFGHIJ', xk + 2));
+    if Pos('K', AFen) > 0 then c := 'K' else c := FindChar(AFen, Copy('ABCDEFGHIJ', xk + 2, 10));
     if c <> '-' then for xr := 9 downto xk do if (ABoard[15 * xr + 0 + 35] = 'R') and ((c = 'K') or (c = Chr(xr + Ord('A')))) then
       result[0] := xr;
     if Pos('Q', AFen) > 0 then c := 'Q' else c := FindChar(AFen, Copy('ABCDEFGHIJ', 1, xk));
@@ -257,7 +257,7 @@ begin
     xk := 0;
 	  while (xk <= 9) and (ABoard[15 * xk + 7 + 35] <> 'k') do Inc(xk);
 	  Assert(xk <= 9);
-    if Pos('k', AFen) > 0 then c := 'k' else c := FindChar(AFen, Copy('abcdefghij', xk + 2));
+    if Pos('k', AFen) > 0 then c := 'k' else c := FindChar(AFen, Copy('abcdefghij', xk + 2, 10));
     if c <> '-' then for xr := 9 downto xk do if (ABoard[15 * xr + 7 + 35] = 'r') and ((c = 'k') or (c = Chr(xr + Ord('a')))) then
       result[2] := xr;
     if Pos('q', AFen) > 0 then c := 'q' else c := FindChar(AFen, Copy('abcdefghij', 1, xk));
@@ -363,174 +363,80 @@ end;
 
 procedure GenCastling(var AList: array of TMove; var ACount: integer; const APos: TPosition; const ASqr: integer);
 var
-  x, xk, yk, xr: integer;
-  LFirst, LLast: integer;
-  LList: array[0..199] of TMove;
-  LCount: integer;
-  LPos: TPosition;
-  LIndex: integer;
-  LFrom, LTo: byte;
-  LType: TPieceType;
+  LXKing, LYKing: integer;
   LAttackedSquares: array[0..9] of boolean;
-  LImpossible, LCapablanca: boolean;
-  LStep: integer;
+
+  procedure GetAttackedSquares;
+  var
+    x: integer;
+    LPos: TPosition;
+    LCount: integer;
+    LList: array[0..199] of TMove;
+    LIndex: integer;
+    LFrom, LTo: byte;
+    LType: TPieceType;
+  begin
+    for x := 0 to 9 do
+      LAttackedSquares[x] := FALSE;
+    LPos := APos;
+    LPos.color := not LPos.color;
+    LCount := 0;
+    GenMoves(LList, LCount, LPos, [goPawnCapturingEmptySquare]);
+    for LIndex := 0 to Pred(LCount) do
+    begin
+      DecodeMove(LList[LIndex], LFrom, LTo, LType);
+      if (LTo - 35) mod 15 = LYKing then
+        LAttackedSquares[(LTo - 35) div 15] := TRUE;
+    end;
+  end;
+
+  procedure GC(const AXRook, AFirst, ALast, AKingTS: integer);
+  var
+    x: integer;
+    LPossible: boolean;
+    LStep: integer;
+  begin
+    LPossible := TRUE;
+    for x := AFirst to ALast do if (x <> LXKing) and (x <> AXRook) and (APos.board[15 * x + LYKing + 35] <> CEmptySquare) then
+    begin
+      ToLog(Format('Roque impossible case occupÃ©e (%d).', [15 * x + LYKing + 35]), 1);
+      LPossible := FALSE; Break;
+    end;
+    if LPossible then 
+    begin
+      LStep := 1 - 2 * Ord(LXKing > AKingTS);
+      x := LXKing;
+      repeat
+        if LAttackedSquares[x] then
+        begin
+          ToLog(Format('Roque impossible case menacÃ©e (%d).', [15 * x + LYKing + 35]), 1);
+          LPossible := FALSE; Break;
+        end;
+        Inc(x, LStep);
+      until x = AKingTS;
+    end;
+    if LPossible and (ACount <= Length(AList)) then
+    begin
+      Inc(ACount);
+      AList[Pred(ACount)] := EncodeMove(ASqr, 15 * AXRook + LYKing + 35, ptNil);
+    end;
+  end;
+
+var
+  L10: boolean;
 begin
-  xk := (ASqr - 35) div 15;
-  yk := (ASqr - 35) mod 15;
-  
-  LPos := APos;
-  LPos.color := not LPos.color;
-  LCount := 0;
-  GenMoves(LList, LCount, LPos, [goPawnCapturingEmptySquare]);
-  for x := 0 to 9 do
-    LAttackedSquares[x] := FALSE;
-  for LIndex := 0 to Pred(LCount) do
+  LXKing := (ASqr - 35) div 15;
+  LYKing := (ASqr - 35) mod 15;
+  GetAttackedSquares;
+  L10 := APos.board[155] <> COutside;
+  if APos.color then
   begin
-    DecodeMove(LList[LIndex], LFrom, LTo, LType);
-    if (LTo - 35) mod 15 = yk then
-      LAttackedSquares[(LTo - 35) div 15] := TRUE;
-  end;
-  
-  LCapablanca := APos.board[155] <> COutside;
-  
-  if (not APos.color) and (APos.castling[0] <> CNil) then
+    if APos.castling[2] <> CNil then GC(APos.castling[2], Min(LXKing, CJSideRookTS[L10]),      Max(APos.castling[2], CJSideKingTS[L10]), CJSideKingTS[L10]);
+    if APos.castling[3] <> CNil then GC(APos.castling[3], Min(APos.castling[3], CASideKingTS), Max(LXKing, CASideRookTS),                CASideKingTS);
+  end else
   begin
-    xr := APos.castling[0];
-    Assert(yk = 0);
-    Assert(APos.board[15 * xr + yk + 35] = 'R');
-    LFirst := Min(xk, OSRTS[LCapablanca]);
-    LLast  := Max(xr, OSKTS[LCapablanca]);
-    LImpossible := FALSE;
-    for x := LFirst to LLast do if (x <> xk) and (x <> xr) and (APos.board[15 * x + yk + 35] <> CEmptySquare) then
-    begin
-      ToLog(Format('Roque impossible case occupée (%d).', [15 * x + yk + 35]));
-      LImpossible := TRUE;
-      Break;
-    end;
-    if not LImpossible then 
-    begin
-      LStep := 1 - 2 * Ord(xk > OSKTS[LCapablanca]);
-      x := xk;
-      repeat
-        if LAttackedSquares[x] then
-        begin
-          ToLog(Format('Roque impossible case menacée (%d).', [15 * x + yk + 35]));
-          LImpossible := TRUE;
-          Break;
-        end;
-        Inc(x, LStep);
-      until x = OSKTS[LCapablanca];
-    end;
-    if (not LImpossible) and (ACount <= Length(AList)) then
-    begin
-      Inc(ACount);
-      AList[Pred(ACount)] := EncodeMove(ASqr, 15 * xr + yk + 35, ptNil);
-    end;
-  end;
-  
-  if (not APos.color) and (APos.castling[1] <> CNil) then
-  begin
-    xr := APos.castling[1];
-    Assert(yk = 0);
-    Assert(APos.board[15 * xr + yk + 35] = 'R');
-    LFirst := Min(xr, ASKTS);
-    LLast  := Max(xk, ASRTS);
-    LImpossible := FALSE;
-    for x := LFirst to LLast do if (x <> xk) and (x <> xr) and (APos.board[15 * x + yk + 35] <> CEmptySquare) then
-    begin
-      ToLog(Format('Roque impossible case occupée (%d).', [15 * x + yk + 35]));
-      LImpossible := TRUE;
-      Break;
-    end;
-    if not LImpossible then 
-    begin
-      LStep := 1 - 2 * Ord(xk > ASKTS);
-      x := xk;
-      repeat
-        if LAttackedSquares[x] then
-        begin
-          ToLog(Format('Roque impossible case menacée (%d).', [15 * x + yk + 35]));
-          LImpossible := TRUE;
-          Break;
-        end;
-        Inc(x, LStep);
-      until x = ASKTS;
-    end;
-    if (not LImpossible) and (ACount <= Length(AList)) then
-    begin
-      Inc(ACount);
-      AList[Pred(ACount)] := EncodeMove(ASqr, 15 * xr + yk + 35, ptNil);
-    end;
-  end;
-  
-  if APos.color and (APos.castling[2] <> CNil) then
-  begin
-    xr := APos.castling[2];
-    Assert(yk = 7);
-    Assert(APos.board[15 * xr + yk + 35] = 'r');
-    LFirst := Min(xk, OSRTS[LCapablanca]);
-    LLast  := Max(xr, OSKTS[LCapablanca]);
-    LImpossible := FALSE;
-    for x := LFirst to LLast do if (x <> xk) and (x <> xr) and (APos.board[15 * x + yk + 35] <> CEmptySquare) then
-    begin
-      ToLog(Format('Roque impossible case occupée (%d).', [15 * x + yk + 35]));
-      LImpossible := TRUE;
-      Break;
-    end;
-    if not LImpossible then 
-    begin
-      LStep := 1 - 2 * Ord(xk > OSKTS[LCapablanca]);
-      x := xk;
-      repeat
-        if LAttackedSquares[x] then
-        begin
-          ToLog(Format('Roque impossible case menacée (%d).', [15 * x + yk + 35]));
-          LImpossible := TRUE;
-          Break;
-        end;
-        Inc(x, LStep);
-      until x = OSKTS[LCapablanca];
-    end;
-    if (not LImpossible) and (ACount <= Length(AList)) then
-    begin
-      Inc(ACount);
-      AList[Pred(ACount)] := EncodeMove(ASqr, 15 * xr + yk + 35, ptNil);
-    end;
-  end;
-  
-  if APos.color and (APos.castling[3] <> CNil) then
-  begin
-    xr := APos.castling[3];
-    Assert(yk = 7);
-    Assert(APos.board[15 * xr + yk + 35] = 'r');
-    LFirst := Min(xr, ASKTS);
-    LLast  := Max(xk, ASRTS);
-    LImpossible := FALSE;
-    for x := LFirst to LLast do if (x <> xk) and (x <> xr) and (APos.board[15 * x + yk + 35] <> CEmptySquare) then
-    begin
-      ToLog(Format('Roque impossible case occupée (%d).', [15 * x + yk + 35]));
-      LImpossible := TRUE;
-      Break;
-    end;
-    if not LImpossible then 
-    begin
-      LStep := 1 - 2 * Ord(xk > ASKTS);
-      x := xk;
-      repeat
-        if LAttackedSquares[x] then
-        begin
-          ToLog(Format('Roque impossible case menacée (%d).', [15 * x + yk + 35]));
-          LImpossible := TRUE;
-          Break;
-        end;
-        Inc(x, LStep);
-      until x = ASKTS;
-    end;
-    if (not LImpossible) and (ACount <= Length(AList)) then
-    begin
-      Inc(ACount);
-      AList[Pred(ACount)] := EncodeMove(ASqr, 15 * xr + yk + 35, ptNil);
-    end;
+    if APos.castling[0] <> CNil then GC(APos.castling[0], Min(LXKing, CJSideRookTS[L10]),      Max(APos.castling[0], CJSideKingTS[L10]), CJSideKingTS[L10]);
+    if APos.castling[1] <> CNil then GC(APos.castling[1], Min(APos.castling[1], CASideKingTS), Max(LXKing, CASideRookTS),                CASideKingTS);
   end;
 end;
 
@@ -585,7 +491,7 @@ var
   LFrom, LTo: byte;
   LType: TPieceType;
   x1, y1, x2, y2: integer;
-  ck, cr: char;
+  LKingChar, LRookChar: char;
 begin
   result := TRUE;
   DecodeMove(AMove, LFrom, LTo, LType);
@@ -628,18 +534,18 @@ begin
   if ((APos.board[LFrom] = 'K') and (APos.board[LTo] = 'R'))
   or ((APos.board[LFrom] = 'k') and (APos.board[LTo] = 'r')) then
   begin
-    ck := APos.board[LFrom];
-    cr := APos.board[LTo];
+    LKingChar := APos.board[LFrom];
+    LRookChar := APos.board[LTo];
     APos.board[LFrom] := CEmptySquare;
     APos.board[LTo] := CEmptySquare;
     if LTo > LFrom then
     begin
-      APos.board[15 * OSKTS[APos.board[155] <> COutside] + y1 + 35] := ck;
-      APos.board[15 * OSRTS[APos.board[155] <> COutside] + y1 + 35] := cr;
+      APos.board[15 * CJSideKingTS[APos.board[155] <> COutside] + y1 + 35] := LKingChar;
+      APos.board[15 * CJSideRookTS[APos.board[155] <> COutside] + y1 + 35] := LRookChar;
     end else
     begin
-      APos.board[15 * ASKTS + y1 + 35] := ck;
-      APos.board[15 * ASRTS + y1 + 35] := cr;
+      APos.board[15 * CASideKingTS + y1 + 35] := LKingChar;
+      APos.board[15 * CASideRookTS + y1 + 35] := LRookChar;
     end;
     Inc(APos.halfmove);
     if APos.color then
@@ -730,7 +636,6 @@ begin
         'a': Dec(result, 700);
         'b': Dec(result, 325);
         'q': Dec(result, 900);
-        //'k': Dec(result, 10000);
         'c': Dec(result, 850);
         'P': Inc(result, 100);
         'R': Inc(result, 500);
@@ -738,7 +643,6 @@ begin
         'A': Inc(result, 700);
         'B': Inc(result, 325);
         'Q': Inc(result, 900);
-        //'K': Inc(result, 10000);
         'C': Inc(result, 850);
       end;
     end;
@@ -784,15 +688,14 @@ var
 begin
   result := '';
   for LIndex := 0 to Pred(ACount) do
-    result := Format('%s%s(%d) ', [result, MoveToStr(AList[LIndex]), AEval[LIndex]]);
+    result := Format('%s%s %d ', [result, MoveToStr(AList[LIndex]), AEval[LIndex]]);
 end;
 
 function IsCheck(const APos: TPosition): boolean;
 var
   LPos: TPosition;
   LList: array[0..199] of TMove;
-  LCount: integer;
-  LIndex: integer;
+  LCount, LIndex: integer;
   LFrom, LTo: byte;
   LType: TPieceType;
 begin
@@ -883,47 +786,63 @@ var
   LFrom, LTo: byte;
   LType: TPieceType;
   LPos: TPosition;
-  LAux: integer;
+  LCenter, LStruct: integer;
+  LCastling, LEnPassant, LCheck, LRepetition, LAnnulation: boolean;
 begin
-  ToLog(Format('Second evaluation (%s).', [MoveToStr(AMove)]), 1);
   DecodeMove(AMove, LFrom, LTo, LType);
-  (*
+  
   LType := CharToPieceType(APos.board[LFrom]);
-  LAux := -1 * Ord(LType);
-  ToLog(Format('Piece type %d.', [LAux]), 1);
-  result := LAux;
-  *)
-  result := 0;
   
-  LAux := Abs((LTo - 35) div 15 - 4);
-  ToLog(Format('Jeu au centre %d.', [LAux]), 1);
-  Dec(result, LAux);
+  LCenter := Abs((LTo - 35) div 15 - 4);
   
-  if ((APos.board[LFrom] = 'K') and (APos.board[LTo] = 'R'))
-  or ((APos.board[LFrom] = 'k') and (APos.board[LTo] = 'r')) then
-  begin
-    ToLog('Bonus roque.', 1);
-    Inc(result);
-  end;
+  LCastling :=
+    ((APos.board[LFrom] = 'K') and (APos.board[LTo] = 'R')) or
+    ((APos.board[LFrom] = 'k') and (APos.board[LTo] = 'r'));
   
-  if ((APos.board[LFrom] = 'P') or (APos.board[LFrom] = 'p')) and ((LFrom - 35) div 15 <> (LTo - 35) div 15) and (APos.board[LTo] = CEmptySquare) then
-  begin
-    ToLog('Bonus prise en passant.', 1);
-    Inc(result);
-  end;
+  LEnPassant :=
+    ((APos.board[LFrom] = 'P') or (APos.board[LFrom] = 'p'))
+    and ((LFrom - 35) div 15 <> (LTo - 35) div 15)
+    and (APos.board[LTo] = CEmptySquare);
   
   LPos := APos;
   DoMove(LPos, AMove);
-  if IsCheck(LPos) then
-  begin
-    ToLog('Bonus échec.', 1);
-    Inc(result);
-  end;
+  LCheck := IsCheck(LPos);
   
   LPos.color := not LPos.color;
-  LAux := PawnStruct(LPos);
-  ToLog(Format('Disposition des pions %d.', [LAux]), 1);
-  Inc(result, LAux);
+  LStruct := PawnStruct(LPos);
+  
+  LRepetition := (LHistory.Count >= 4) and (MoveToStr(AMove) = LHistory[LHistory.Count - 3]);
+  LAnnulation := (LHistory.Count >= 2) and (MoveToStr(AMove) = Concat(
+    Copy(LHistory[LHistory.Count - 1], 3, 2),
+    Copy(LHistory[LHistory.Count - 1], 1, 2)
+  ));
+  
+  result :=
+    0
+    - Ord(LType)
+    - LCenter
+    + Ord(LCastling)
+    + Ord(LEnPassant)
+    + Ord(LCheck)
+    + LStruct
+    - Ord(LRepetition)
+    - Ord(LAnnulation);
+  
+  ToLog(Format(
+    '%5s %2d %2d %2d %2d %2d %2d %2d %2d %d',
+    [
+      MoveToStr(AMove),
+      Ord(LType),
+      LCenter,
+      Ord(LCastling),
+      Ord(LEnPassant),
+      Ord(LCheck),
+      LStruct,
+      Ord(LRepetition),
+      Ord(LAnnulation),
+      result
+    ]
+  ), 1);
 end;
 
 function BestMove(const APos: TPosition; const ATime: cardinal): string;
@@ -932,18 +851,19 @@ var
   LEval: array[0..199] of integer;
   LCount, LIndex: integer;
 begin
+  ToLog(ShowPosition(APos), 1);
   LCount := 0;
   GenMoves(LList, LCount, APos, [goCastling]);
   for LIndex := 0 to Pred(LCount) do
     LEval[LIndex] := FirstEval(APos, LList[LIndex]);
   Sort(LList, LEval, LCount);
-  ToLog(Concat(#13#10, ShowPosition(APos), #13#10, ArrayToStr(LList, LEval, LCount)), 1);
+  ToLog(ArrayToStr(LList, LEval, LCount), 1);
   
   LCount := BestMovesCount(LEval, LCount);
   for LIndex := 0 to Pred(LCount) do
     LEval[LIndex] := SecondEval(APos, LList[LIndex]);
   Sort(LList, LEval, LCount);
-  ToLog(Concat(#13#10, ArrayToStr(LList, LEval, LCount)), 1);
+  ToLog(ArrayToStr(LList, LEval, LCount), 1);
   
   result := MoveToStr(LList[0]);
 end;
@@ -954,11 +874,11 @@ var
   LCount, LLegalCount, LIndex: integer;
   LPos: TPosition;
 begin
-  ToLog('RandomMove');
+  //ToLog('RandomMove');
   LCount := 0;
   LLegalCount := 0;
   GenMoves(LList, LCount, APos, [goCastling]);
-  ToLog(Format('%d moves generated', [LCount]));
+  //ToLog(Format('%d moves generated', [LCount]));
   for LIndex := 0 to Pred(LCount) do
   begin
     LPos := APos;
@@ -973,8 +893,33 @@ begin
         LLegal[Pred(LLegalCount)] := LList[LIndex];
       end;
   end;
-  ToLog(Format('%d legal moves', [LLegalCount]));
+  //ToLog(Format('%d legal moves', [LLegalCount]));
   result := MoveToStr(LLegal[Random(LLegalCount)]);
+end;
+
+procedure GenLegalMoves(var AMoves: TStrArray; const APos: TPosition);
+var
+  LList, LLegal: array[0..199] of TMove;
+  LCount, LLegalCount, LIndex: integer;
+  LPos: TPosition;
+begin
+  LCount := 0;
+  LLegalCount := 0;
+  GenMoves(LList, LCount, APos, [goCastling]);
+  for LIndex := 0 to Pred(LCount) do
+  begin
+    LPos := APos;
+    DoMove(LPos, LList[LIndex]);
+    LPos.color := not LPos.color;
+    if not IsCheck(LPos) and (LLegalCount <= Length(LLegal)) then
+    begin
+      Inc(LLegalCount);
+      LLegal[Pred(LLegalCount)] := LList[LIndex];
+    end;
+  end;
+  SetLength(AMoves, LLegalCount);
+  for LIndex := 0 to Pred(LLegalCount) do
+    AMoves[LIndex] := MoveToStr(LLegal[LIndex]);
 end;
 
 end.
