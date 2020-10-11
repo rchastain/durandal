@@ -1,6 +1,8 @@
 
 unit History;
 
+{$MODE Delphi}
+
 interface
 
 uses

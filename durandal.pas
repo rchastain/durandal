@@ -1,19 +1,21 @@
 
+program Durandal;
+
+{$IFDEF WINDOWS}
 {$APPTYPE CONSOLE}
+{$ENDIF}
 
 uses
-  SysUtils, Classes, Math, StrUtils, Chess, Log, History,
-{$IFDEF FPC}
-  Parser_FreePascal;
-{$ELSE}
-  Parser;
+{$IFDEF UNIX}
+  CThreads,
 {$ENDIF}
+  SysUtils, Classes, Math, StrUtils, Chess, Log, History, Parser;
 
 {$I version.inc}
 
 procedure SendToUser(const AText: string; const AFlush: boolean = TRUE);
 begin
-  ToLog(Concat(TimeToStr(Now), ' << ', AText));
+  ToLog(Concat(TimeToStr(Now), ' <- ', AText));
   WriteLn(output, AText);
   if AFlush then
     Flush(output);
@@ -40,7 +42,7 @@ begin
   if not Terminated then
   begin
     SendToUser(Format('bestmove %s', [LMove]));
-    ToLog(FormatDateTime('"Temps écoulé : "hh:nn:ss:zzz', LTimeElapsed / (1000 * SECSPERDAY)), 1);
+    ToLog(FormatDateTime('"** Time elapsed: "hh:nn:ss:zzz', LTimeElapsed / (1000 * SECSPERDAY)), 1);
   end;
 end;
 
@@ -60,21 +62,22 @@ begin
 {$IFDEF RANDOM_MOVER}
   Randomize;
 {$ENDIF}
+  ToLog(Concat('** ', CAppInfo));
   LCapablanca := FALSE;
   while not EOF do
   begin
     ReadLn(LUserCmd);
-    ToLog(Concat(TimeToStr(Now), ' >> ', LUserCmd));
+    ToLog(Concat(TimeToStr(Now), ' -> ', LUserCmd));
     if LUserCmd = 'quit' then
       Break
     else
     if LUserCmd = 'uci' then
     begin
-      SendToUser(Format('id name %s %s', [CApp, CVer]), FALSE);
-      SendToUser(Format('id author %s', [CAut]), FALSE);
-     {SendToUser('option name UCI_Chess960 type check default false', FALSE);
+      SendToUser(Format('id name %s %s', [CAppName, CVersion]), FALSE);
+      SendToUser(Format('id author %s', [CAuthor]), FALSE);
+      SendToUser('option name UCI_Chess960 type check default false', FALSE);
       SendToUser('option name UCI_Capablanca type check default false', FALSE);
-      SendToUser('option name UCI_Caparandom type check default false', FALSE);}
+      SendToUser('option name UCI_Caparandom type check default false', FALSE);
       SendToUser('option name UCI_Variant type combo default chess var capablanca var caparandom var chess var fischerandom', FALSE);
       SendToUser('uciok');
     end else
@@ -126,13 +129,13 @@ begin
       with LProcessus do
       begin
         FreeOnTerminate := TRUE;
-        Priority := tpHigher;
+        Priority := tpNormal;
         Start;
       end;
     end else
     if LUserCmd = 'show' then
       SendToUser(ShowPosition(LPos))
-	  else
-	    ToLog(Format('Commande non reconnue : %s', [LUserCmd]));
+    else
+      ToLog(Format('** Unknown command: %s', [LUserCmd]));
   end;
 end.

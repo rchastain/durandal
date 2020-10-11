@@ -1,5 +1,12 @@
 
 const
-  CApp = 'Durandal';
-  CVer = '0.0.5';
-  CAut = 'Roland Chastain';
+  CAppName = 'Durandal';
+  CVersion = '0.0.6';
+  CAuthor  = 'Roland Chastain';
+{$IFDEF FPC}
+  CBuild = 'build ' + {$I %DATE%} + ' ' + {$I %TIME%};
+  CCompiler = 'Free Pascal ' + {$I %FPCVERSION%} + ' ' + {$I %FPCTARGET%};
+  CAppInfo = CAppName + ' ' + CVersion + ' ' + CBuild + ' ' + CCompiler;
+{$ELSE}
+  CAppInfo = CAppName + ' ' + CVersion;
+{$ENDIF}

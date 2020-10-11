@@ -23,17 +23,14 @@ var
 begin
   if not DirectoryExists(CDir) then
     if not CreateDir(CDir) then
-      raise Exception.Create('Impossible de créer le dossier.');
+      raise Exception.Create('Cannot create directory.');
   LDateTime := FormatDateTime('yyyymmddhhnnss', Now);
   for LFileNum := 0 to 1 do
     LName[LFileNum] := Format('%s-%s-%d.log', [ChangeFileExt(ExtractFileName(ParamStr(0)), ''), LDateTime, LFileNum]);
   for LFileNum := 0 to 1 do
   begin
-    Assign(LFile[LFileNum], CDir + '\' + LName[LFileNum]);
-    if FileExists(LName[LFileNum]) then
-      Append(LFile[LFileNum])
-    else
-      Rewrite(LFile[LFileNum]);
+    Assign(LFile[LFileNum], CDir + DirectorySeparator + LName[LFileNum]);
+    Rewrite(LFile[LFileNum]);
   end;
 end;
 

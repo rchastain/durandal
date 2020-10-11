@@ -1,6 +1,5 @@
 
 unit Chess;
-{$ASSERTIONS ON}
 
 interface
 
@@ -34,9 +33,9 @@ type
 function ShowPosition(const APos: TPosition): string;
 function SquareToStr(const x, y: integer): string; overload;
 function SquareToStr(const i: integer): string; overload;
-function EncodeMove(const AFrom, ATo: byte; const APromo: TPieceType): TMove;
-procedure DecodeMove(const AMove: TMove; out AFrom, ATo: byte; out APromo: TPieceType); overload;
-procedure DecodeMove(const AMove: string; out AFrom, ATo: byte; out APromo: TPieceType); overload;
+function EncodeMove(const AFrom, ATo: integer; const APromo: TPieceType): TMove;
+procedure DecodeMove(const AMove: TMove; out AFrom, ATo: integer; out APromo: TPieceType); overload;
+procedure DecodeMove(const AMove: string; out AFrom, ATo: integer; out APromo: TPieceType); overload;
 function MoveToStr(const AMove: TMove): string;
 procedure InitBoard(var ABoard: TBoard; const AFen: string);
 function EncodeCastling(const AFen: string; const ABoard: TBoard): TCastling;
@@ -119,12 +118,12 @@ begin
   result := SquareToStr((i - 35) div 15, (i - 35) mod 15);
 end;
 
-function EncodeMove(const AFrom, ATo: byte; const APromo: TPieceType): TMove;
+function EncodeMove(const AFrom, ATo: integer; const APromo: TPieceType): TMove;
 begin
   result := (AFrom shl 24) or (ATo shl 16) or (Ord(APromo) shl 8);
 end;
 
-procedure DecodeMove(const AMove: TMove; out AFrom, ATo: byte; out APromo: TPieceType);
+procedure DecodeMove(const AMove: TMove; out AFrom, ATo: integer; out APromo: TPieceType);
 begin
   AFrom  := (AMove and $FF000000) shr 24;
   ATo    := (AMove and $00FF0000) shr 16;
@@ -147,7 +146,7 @@ begin
   end
 end;
 
-procedure DecodeMove(const AMove: string; out AFrom, ATo: byte; out APromo: TPieceType);
+procedure DecodeMove(const AMove: string; out AFrom, ATo: integer; out APromo: TPieceType);
 var
   x, y: integer;
 begin
@@ -172,7 +171,7 @@ end;
 
 function MoveToStr(const AMove: TMove): string;
 var
-  LFrom, LTo: byte;
+  LFrom, LTo: integer;
   LType: TPieceType;
 begin
   DecodeMove(AMove, LFrom, LTo, LType);
@@ -193,6 +192,7 @@ var
   i, j: integer;
   x, y: integer;
 begin
+  //WriteLn({$I %FILE%} + ' ' + {$I %LINE%} + ' -> InitBoard');
   for i := Low(ABoard) to High(ABoard) do
     ABoard[i] := COutside;
   i := 1;
@@ -229,6 +229,7 @@ begin
     end;
     Inc(i);
   end;
+  //WriteLn({$I %FILE%} + ' ' + {$I %LINE%} + ' <- InitBoard');
 end;
 
 function EncodeCastling(const AFen: string; const ABoard: TBoard): TCastling;
@@ -236,6 +237,7 @@ var
   xk, xr: integer;
   c: char;
 begin
+  //WriteLn({$I %FILE%} + ' ' + {$I %LINE%} + ' -> EncodeCastling');
   result[0] := CNil;
   result[1] := CNil;
   result[2] := CNil;
@@ -307,7 +309,7 @@ end;
 
 procedure GenPawnMoves(var AList: array of TMove; var ACount: integer; const APos: TPosition; const ASqr: integer; const AVect: array of integer; const ACastlingGenProc: boolean);
 var
-  i, LSqr, y: integer;
+  LSqr, i, LRow: integer;
   LType: TPieceType;
 begin
   if not ACastlingGenProc then
@@ -316,12 +318,12 @@ begin
     Inc(LSqr, AVect[0]);
     if APos.board[LSqr] = CEmptySquare then
     begin
-      y := (LSqr - 35) mod 15;
-      if (y = 0) or (y = 7) then
+      LRow := (LSqr - 35) mod 15;
+      if (LRow = 0) or (LRow = 7) then
         LType := ptQueen
       else
         LType := ptNil;
-      if ACount <= Length(AList) then
+      if ACount < Length(AList) then
       begin
         Inc(ACount);
         AList[Pred(ACount)] := EncodeMove(ASqr, LSqr, LType);
@@ -347,8 +349,8 @@ begin
     or (APos.board[LSqr] = CEmptySquare) and (SquareToStr(LSqr) = APos.enpassant)
     or (APos.board[LSqr] = CEmptySquare) and ACastlingGenProc then
     begin
-      y := (LSqr - 35) mod 15;
-      if (y = 0) or (y = 7) then
+      LRow := (LSqr - 35) mod 15;
+      if (LRow = 0) or (LRow = 7) then
         LType := ptQueen
       else
         LType := ptNil;
@@ -373,7 +375,7 @@ var
     LCount: integer;
     LList: array[0..199] of TMove;
     LIndex: integer;
-    LFrom, LTo: byte;
+    LFrom, LTo: integer;
     LType: TPieceType;
   begin
     for x := 0 to 9 do
@@ -399,7 +401,7 @@ var
     LPossible := TRUE;
     for x := AFirst to ALast do if (x <> LXKing) and (x <> AXRook) and (APos.board[15 * x + LYKing + 35] <> CEmptySquare) then
     begin
-      ToLog(Format('Roque impossible case occupée (%d).', [15 * x + LYKing + 35]), 1);
+      ToLog(Format('** Roque impossible case occupée (%d).', [15 * x + LYKing + 35]), 1);
       LPossible := FALSE; Break;
     end;
     if LPossible then 
@@ -409,7 +411,7 @@ var
       repeat
         if LAttackedSquares[x] then
         begin
-          ToLog(Format('Roque impossible case menacée (%d).', [15 * x + LYKing + 35]), 1);
+          ToLog(Format('** Roque impossible case menacée (%d).', [15 * x + LYKing + 35]), 1);
           LPossible := FALSE; Break;
         end;
         Inc(x, LStep);
@@ -488,7 +490,7 @@ end;
   
 function DoMove(var APos: TPosition; const AMove: TMove): boolean;
 var
-  LFrom, LTo: byte;
+  LFrom, LTo: integer;
   LType: TPieceType;
   x1, y1, x2, y2: integer;
   LKingChar, LRookChar: char;
@@ -591,7 +593,7 @@ end;
 
 function DoMove(var APos: TPosition; const AMove: string): boolean;
 var
-  LFrom, LTo: byte;
+  LFrom, LTo: integer;
   pt: TPieceType;
   m: TMove;
   LMove: string;
@@ -696,7 +698,7 @@ var
   LPos: TPosition;
   LList: array[0..199] of TMove;
   LCount, LIndex: integer;
-  LFrom, LTo: byte;
+  LFrom, LTo: integer;
   LType: TPieceType;
 begin
   LPos := APos;
@@ -717,7 +719,7 @@ var
   LPos1, LPos2, LPos3: TPosition;
   LList1, LList2: array[0..199] of TMove;
   LCount1, LCount2, LIndex1, LIndex2, LRes, LMax: integer;
-  LFrom, LTo: byte;
+  LFrom, LTo: integer;
   LType: TPieceType;
 begin
   LPos1 := APos;
@@ -783,7 +785,7 @@ end;
 
 function SecondEval(const APos: TPosition; const AMove: TMove): integer;
 var
-  LFrom, LTo: byte;
+  LFrom, LTo: integer;
   LType: TPieceType;
   LPos: TPosition;
   LCenter, LStruct: integer;
@@ -874,18 +876,17 @@ var
   LCount, LLegalCount, LIndex: integer;
   LPos: TPosition;
 begin
-  //ToLog('RandomMove');
   LCount := 0;
   LLegalCount := 0;
   GenMoves(LList, LCount, APos, [goCastling]);
-  //ToLog(Format('%d moves generated', [LCount]));
+  ToLog(Format('** %d moves generated', [LCount]));
   for LIndex := 0 to Pred(LCount) do
   begin
     LPos := APos;
     DoMove(LPos, LList[LIndex]);
     LPos.color := not LPos.color;
     if IsCheck(LPos) then
-      ToLog(Format('illegal move %s', [MoveToStr(LList[LIndex])]))
+      ToLog(Format('** Illegal move %s', [MoveToStr(LList[LIndex])]))
     else
       if LLegalCount <= Length(LLegal) then
       begin
@@ -893,7 +894,7 @@ begin
         LLegal[Pred(LLegalCount)] := LList[LIndex];
       end;
   end;
-  //ToLog(Format('%d legal moves', [LLegalCount]));
+  ToLog(Format('** %d legal moves', [LLegalCount]));
   result := MoveToStr(LLegal[Random(LLegalCount)]);
 end;
 
