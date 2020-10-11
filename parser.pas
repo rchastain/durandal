@@ -20,7 +20,7 @@ uses
   SysUtils, RegExpr;
 
 var
-  LRESetOption,{ LREPosStartPos,} LREMove, LREPosFen: TRegExpr;
+  LRESetOption, LREMove, LREPosFen: TRegExpr;
   LREGo: array[1..4] of TRegExpr;
 
 function IsCmdSetOption(const AStr: string; out AName, AValue: string): boolean;
@@ -158,7 +158,7 @@ end;
 initialization
   LRESetOption := TRegExpr.Create('setoption name (.+) value (\w+)');
   LREMove := TRegExpr.Create('[a-j]\d[a-j]\d[rnbqac]?');
-  LREPosFen := TRegExpr.Create('position fen ([0-9ABCKNPQRabcknpqr/]+ [wb] [KQkqA-Ja-j\-]+ [a-h36\-] \d+ \d+)( moves .+)?');
+  LREPosFen := TRegExpr.Create('position fen ([0-9ABCKNPQRabcknpqr/]+ [wb] [KQkqA-Ja-j\-]+ [a-h36\-]+ \d+ \d+)( moves .+)?');
   LREGo[1] := TRegExpr.Create('go movetime (\d+)');
   LREGo[2] := TRegExpr.Create('go ([wb])time (\d+) ([wb])time (\d+)');
   LREGo[3] := TRegExpr.Create('go ([wb])time (\d+) ([wb])time (\d+) movestogo (\d+)');

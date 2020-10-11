@@ -102,8 +102,9 @@ begin
       if IsCmdPosFen(LUserCmd, LFen, LMoves)then
       begin
         InitPosition(LPos, LFen);
+        LHistory.Clear;
       end else
-        Assert(FALSE);
+        ToLog(Format('** Unknown command: %s', [LUserCmd]));
       for LIdx := Low(LMoves) to High(LMoves) do
       begin
         DoMove(LPos, LMoves[LIdx]);
