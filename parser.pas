@@ -20,7 +20,7 @@ uses
   SysUtils, RegExpr;
 
 var
-  LRESetOption, LREMove, LREPosFen: TRegExpr;
+  LRESetOption,{ LREPosStartPos,} LREMove, LREPosFen: TRegExpr;
   LREGo: array[1..4] of TRegExpr;
 
 function IsCmdSetOption(const AStr: string; out AName, AValue: string): boolean;
@@ -62,7 +62,8 @@ begin
   begin
     AFen := LREPosFen.Match[1];
     LCount := 0;
-    if LREMove.Exec(LREPosFen.Match[2]) then
+    if (LREPosFen.Match[2] <> '')
+    and LREMove.Exec(LREPosFen.Match[2]) then
     repeat
       Inc(LCount);
       if Pred(LCount) > High(AMoves) then
