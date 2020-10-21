@@ -4,7 +4,7 @@
 
 *Durandal* is a UCI chess engine able to play traditional chess, Fischer random chess, Capablanca chess and Capablanca random chess.
 
-Despite its heroic name, *Durandal* is not a very formidable opponent. You should manage to beat him easily.
+Despite his heroic name, *Durandal* is not a very formidable opponent. You should manage to beat him easily.
 
 ## Logo
 
