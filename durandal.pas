@@ -49,6 +49,7 @@ end;
 const
   CStartPos = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
   CCapablancaStartPos = 'rnabqkbcnr/pppppppppp/10/10/10/10/PPPPPPPPPP/RNABQKBCNR w KQkq - 0 1';
+  CGothicStartPos = 'rnbqckabnr/pppppppppp/10/10/10/10/PPPPPPPPPP/RNBQCKABNR w KQkq - 0 1';
   
 var
   LFen, LUserCmd, LName, LValue: string;
@@ -56,14 +57,14 @@ var
   LProcessus: TProcessus;
   LMTime, LWTime, LBTime, LMTG, LWInc, LBInc: integer;
   LIdx: integer;
-  LCapablanca: boolean;
+  LVariant: string;
   
 begin
 {$IFDEF RANDOM_MOVER}
   Randomize;
 {$ENDIF}
   ToLog(Concat('** ', CAppInfo));
-  LCapablanca := FALSE;
+  LVariant := 'chess';
   while not EOF do
   begin
     ReadLn(LUserCmd);
@@ -78,7 +79,8 @@ begin
       SendToUser('option name UCI_Chess960 type check default false', FALSE);
       SendToUser('option name UCI_Capablanca type check default false', FALSE);
       SendToUser('option name UCI_Caparandom type check default false', FALSE);
-      SendToUser('option name UCI_Variant type combo default chess var capablanca var caparandom var chess var fischerandom', FALSE);
+      SendToUser('option name UCI_Gothic type check default false', FALSE);
+      SendToUser('option name UCI_Variant type combo default chess var capablanca var caparandom var chess var fischerandom var gothic', FALSE);
       SendToUser('uciok');
     end else
     if LUserCmd = 'isready' then
@@ -89,13 +91,19 @@ begin
     else
     if IsCmdSetOption(LUserCmd, LName, LValue) then
     begin
-      if LName = 'UCI_Variant' then LCapablanca := (LValue = 'capablanca') or (LValue = 'caparandom');
+      if LName = 'UCI_Chess960'   then LVariant := 'fischerandom' else
+      if LName = 'UCI_Capablanca' then LVariant := 'capablanca'   else
+      if LName = 'UCI_Caparandom' then LVariant := 'caparandom'   else
+      if LName = 'UCI_Gothic'     then LVariant := 'gothic'       else
+      if LName = 'UCI_Variant'    then LVariant := LValue;
     end else
     if Copy(LUserCmd, 1, 8) = 'position' then
     begin
       if IsCmdPosStartPos(LUserCmd, LMoves) then
       begin
-        LFen := IfThen(LCapablanca, CCapablancaStartPos, CStartPos);
+        if LVariant = 'capablanca' then LFen := CCapablancaStartPos else
+        if LVariant = 'gothic'     then LFen := CGothicStartPos     else
+        LFen := CStartPos;
         InitPosition(LPos, LFen);
         LHistory.Clear;
       end else
