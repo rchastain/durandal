@@ -1,7 +1,7 @@
 
 const
   CAppName = 'Durandal';
-  CVersion = '0.0.7';
+  CVersion = '0.0.8';
   CAuthor  = 'Roland Chastain';
 {$IFDEF FPC}
   CBuild = 'build ' + {$I %DATE%} + ' ' + {$I %TIME%};
