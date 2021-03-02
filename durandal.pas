@@ -63,7 +63,7 @@ begin
 {$IFDEF RANDOM_MOVER}
   Randomize;
 {$ENDIF}
-  ToLog(Concat('** ', CAppInfo));
+  ToLog(Concat(TimeToStr(Now), ' ** ', CAppInfo));
   LVariant := 'chess';
   while not EOF do
   begin
@@ -112,7 +112,7 @@ begin
         InitPosition(LPos, LFen);
         LHistory.Clear;
       end else
-        ToLog(Format('** Unknown command: %s', [LUserCmd]));
+        ToLog(Concat(TimeToStr(Now), Format(' ** Unknown command: %s', [LUserCmd])));
       for LIdx := Low(LMoves) to High(LMoves) do
       begin
         DoMove(LPos, LMoves[LIdx]);
@@ -145,6 +145,6 @@ begin
     if LUserCmd = 'show' then
       SendToUser(ShowPosition(LPos))
     else
-      ToLog(Format('** Unknown command: %s', [LUserCmd]));
+      ToLog(Concat(TimeToStr(Now), Format(' ** Unknown command: %s', [LUserCmd])));
   end;
 end.
