@@ -14,22 +14,21 @@ var
   LFile: array[0..1] of text;
 
 procedure CreateFiles;
-const
-  CDir = 'log';
 var
-  LDateTime: string;
+  LDir, LDateTime: string;
   LName: array[0..1] of string;
   LFileNum: integer;
 begin
-  if not DirectoryExists(CDir) then
-    if not CreateDir(CDir) then
+  LDir := ExtractFileDir(ParamStr(0)) + DirectorySeparator + 'log';
+  if not DirectoryExists(LDir) then
+    if not CreateDir(LDir) then
       raise Exception.Create('Cannot create directory.');
   LDateTime := FormatDateTime('yyyymmddhhnnss', Now);
   for LFileNum := 0 to 1 do
     LName[LFileNum] := Format('%s-%s-%d.log', [ChangeFileExt(ExtractFileName(ParamStr(0)), ''), LDateTime, LFileNum]);
   for LFileNum := 0 to 1 do
   begin
-    Assign(LFile[LFileNum], CDir + DirectorySeparator + LName[LFileNum]);
+    Assign(LFile[LFileNum], LDir + DirectorySeparator + LName[LFileNum]);
     Rewrite(LFile[LFileNum]);
   end;
 end;
